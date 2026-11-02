@@ -1,4 +1,4 @@
-const CACHE="kala-utsav-2026-v5";
+const CACHE="kala-utsav-2026-v6";
 const FILES=["./","./index.html","./style.css","./app.js","./manifest.json"];
 self.addEventListener("install",event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES)).then(()=>self.skipWaiting())));
 self.addEventListener("activate",event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith("kala-utsav-2026-")&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
