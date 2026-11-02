@@ -58,12 +58,15 @@ Deno.serve(async (req) => {
     const udise = String(body.udise || "").trim();
     if (!block || !school) return json({ error: "Block and school are required" }, 400);
     if (udise && !/^\d{11}$/.test(udise)) return json({ error: "UDISE must contain exactly 11 digits" }, 400);
+    const existing = await db.from("kala_school_suggestions").select("block,school,udise,source,verification_status")
+      .ilike("block", block).ilike("school", school).eq("udise", udise).maybeSingle();
+    if (existing.error) return json({ error: existing.error.message }, 500);
+    if (existing.data) return json({ school: existing.data });
     const { data, error } = await db.from("kala_school_suggestions")
-      .upsert({ block, school, udise, source: "manual", verification_status: "Pending Verification" },
-        { onConflict: "lower(block),lower(school),udise", ignoreDuplicates: true })
-      .select().maybeSingle();
+      .insert({ block, school, udise, source: "manual", verification_status: "Pending Verification" })
+      .select("block,school,udise,source,verification_status").single();
     if (error) return json({ error: error.message }, 500);
-    return json({ school: data || { block, school, udise, verification_status: "Pending Verification" } });
+    return json({ school: data });
   }
   if (path === "create" && req.method === "POST") {
     const r = body.record as Record<string, unknown> | undefined;
