@@ -24,7 +24,60 @@ function getMembers(){let names=parsedNames();return names.map((name,i)=>({name,
 function updateNames(){let m=getMembers();return m.map(x=>x.name).filter(Boolean).join("\n")}
 async function setOptions(){CATS.forEach((c,i)=>$("art").add(new Option(c[0],i)));BLOCKS.forEach(b=>$("block").add(new Option(b,b)));updateDates();updateEntryType()}
 function updateDates(){let c=CATS[+$("art").value||0];$("eventDate").innerHTML="";(c[1].includes("एवं")?["05.11.2026","06.11.2026"]:[c[1]]).forEach(d=>$("eventDate").add(new Option(d,d)))}
-function showTab(n){document.querySelectorAll(".view").forEach(x=>x.hidden=x.id!==n);document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===n));if(n==="records")renderRecords();if(n==="summary")renderSummary()}
+
+const JUDGES={
+"श्री विश्वजीत कुमार":"संगीत गायन","श्रीमती पूजा कुमारी":"संगीत गायन",
+"श्री तारा कांत सिंह":"संगीत वादन","श्री राहुल कुमार":"संगीत वादन",
+"श्रीमती सोनी कुमारी":"नृत्य","श्रीमती उर्मिला मिश्रा":"नृत्य",
+"श्री उमेश कुमार प्रसाद सिंह":"नाटक","श्री संजीव कुमार शर्मा":"नाटक",
+"श्रीमती ललिता भारती":"दृश्य कला","श्रीमती अर्चना कुमारी":"दृश्य कला",
+"श्री अमरेश कुमार":"पारंपरिक कहानी वाचन","श्री सुधाकर कांत चक्रवर्ती":"पारंपरिक कहानी वाचन"
+};
+const RUBRICS={
+"संगीत गायन":[["सुर",20],["लय",20],["शैली में प्रामाणिकता",20],["प्रस्तुति तकनीक",20],["लेखन / वीडियो",20]],
+"संगीत वादन":[["सुर",20],["लय",20],["शैली में प्रामाणिकता",20],["प्रस्तुति तकनीक",20],["लेखन / वीडियो",20]],
+"नृत्य":[["शैली में प्रामाणिकता",20],["विविधताओं में नवाचार",20],["वेशभूषा",10],["प्रस्तुति कौशल",20],["संगीत",10],["लेखन / वीडियो",20]],
+"नाटक":[["विषयवस्तु",10],["संचार कौशल / अभिव्यक्ति",20],["मंच साज-सज्जा / डिजाइन",15],["पोशाक और श्रृंगार",15],["समग्र प्रस्तुति",20],["लेखन / वीडियो",20]],
+"दृश्य कला":[["रचना एवं शैली",20],["मौलिकता",20],["तकनीक",20],["प्रस्तुति / कथन",20],["लेखन / वीडियो",20]],
+"पारंपरिक कहानी वाचन":[["विषयवस्तु",20],["संचार कौशल / अभिव्यक्ति",20],["मंच साज-सज्जा / डिजाइन",10],["पोशाक और श्रृंगार",10],["समग्र प्रस्तुति",20],["लेखन / वीडियो",20]]
+};
+function judgeDiscipline(category){if(category.includes("संगीत गायन"))return "संगीत गायन";if(category.includes("संगीत वादन"))return "संगीत वादन";if(category.includes("नृत्य"))return "नृत्य";if(category.includes("नाटक"))return "नाटक";if(category.includes("दृश्य कला"))return "दृश्य कला";return "पारंपरिक कहानी वाचन"}
+let selectedJudge="",selectedEntry=null,existingEvaluations=[];
+async function initEvaluation(){
+ const js=$("judgeSelect"),as=$("judgeArt");js.innerHTML='<option value="">Select judge</option>';
+ Object.keys(JUDGES).forEach(n=>js.add(new Option(n,n)));
+ js.onchange=()=>{selectedJudge=js.value;as.innerHTML='<option value="">Select art form</option>';if(selectedJudge)CATS.forEach((cat,i)=>{if(judgeDiscipline(cat[0])===JUDGES[selectedJudge])as.add(new Option(cat[0],i))});$("judgeEntryList").innerHTML="";$("judgeScorePanel").hidden=true};
+ as.onchange=renderJudgeEntries;
+}
+async function renderJudgeEntries(){
+ const rows=await all(),idx=+$("judgeArt").value,cat=CATS[idx]?.[0];$("judgeEntryList").innerHTML="";$("judgeScorePanel").hidden=true;
+ if(!cat)return;
+ let ev=[];try{const x=await api("evaluation-list");ev=x.evaluations||[]}catch(e){$("judgeEntryList").textContent="Evaluation service not ready: "+e.message;return}
+ existingEvaluations=ev;
+ rows.filter(x=>x.category===cat).sort((a,b)=>a.names.localeCompare(b.names)).forEach(x=>{
+  const b=document.createElement("button");b.type="button";b.className="secondary";b.style.display="block";b.style.width="100%";b.style.textAlign="left";b.style.margin="8px 0";
+  const done=ev.some(v=>v.registration_id===x.id&&v.judge_name===selectedJudge);
+  b.textContent=(done?"✓ ":"○ ")+x.names+" — "+x.school+" ("+x.id+")";b.onclick=()=>openJudgeEntry(x);$("judgeEntryList").append(b);
+ });
+ if(!$("judgeEntryList").children.length)$("judgeEntryList").textContent="No registrations found in this category.";
+}
+async function openJudgeEntry(x){
+ selectedEntry=x;const discipline=judgeDiscipline(x.category),rubric=RUBRICS[discipline];$("judgeScorePanel").hidden=false;
+ $("judgeEntryTitle").textContent=x.names;$("judgeEntryMeta").textContent=x.category+" • "+x.block+" • "+x.school+" • "+x.id;
+ const old=existingEvaluations.find(v=>v.registration_id===x.id&&v.judge_name===selectedJudge);
+ $("judgeCriteria").innerHTML="";
+ rubric.forEach(([name,max],i)=>{const label=document.createElement("label");label.textContent=name+" (अधिकतम "+max+")";const input=document.createElement("input");input.type="number";input.min=0;input.max=max;input.step=1;input.required=true;input.id="judgeMark"+i;input.value=old?.scores?.[i]??"";input.dataset.max=max;label.append(input);$("judgeCriteria").append(label)});
+ $("judgeRemarks").value=old?.remarks||"";$("evaluationMsg").textContent=old?"Existing evaluation loaded. You may edit and save.":"New evaluation.";
+}
+$("saveEvaluation").onclick=async()=>{
+ if(!selectedJudge||!selectedEntry)return;
+ const discipline=judgeDiscipline(selectedEntry.category),rubric=RUBRICS[discipline],scores=[];
+ for(let i=0;i<rubric.length;i++){const v=$("judgeMark"+i).value,n=Number(v);if(v===""||!Number.isInteger(n)||n<0||n>rubric[i][1])return alert(rubric[i][0]+": enter a whole number from 0 to "+rubric[i][1]);scores.push(n)}
+ const total=scores.reduce((a,b)=>a+b,0);
+ try{await api("evaluation-save","POST",{registration_id:selectedEntry.id,judge_name:selectedJudge,category:selectedEntry.category,discipline,scores,total,remarks:$("judgeRemarks").value});$("evaluationMsg").textContent="Saved successfully. Total: "+total+"/100";await renderJudgeEntries();openJudgeEntry(selectedEntry)}catch(e){alert("Evaluation save failed: "+e.message)}
+};
+
+function showTab(n){document.querySelectorAll(".view").forEach(x=>x.hidden=x.id!==n);document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===n));if(n==="records")renderRecords();if(n==="evaluation")initEvaluation();if(n==="summary")renderSummary()}
 async function renderRecords(){let rows=await all(),q=$("search").value.toLowerCase();$("recordRows").innerHTML="";rows.filter(x=>JSON.stringify(x).toLowerCase().includes(q)).sort((a,b)=>b.created-a.created).forEach(x=>{let tr=document.createElement("tr");[x.id,x.category,x.date,x.type+": "+(x.names||"" ).replace(/\n/g,", "),x.block,x.school,x.official+(x.synced?"":" • Pending sync")].forEach(v=>{let td=document.createElement("td");td.textContent=v;tr.append(td)});let td=document.createElement("td"),btn=document.createElement("button");btn.textContent="Delete";btn.className="secondary";btn.onclick=async()=>{if(!confirm("Delete this entry?"))return;if(x.synced&&navigator.onLine){try{await api("delete","POST",{id:x.id})}catch(e){return alert("Cloud delete failed: "+e.message)}}await del(x.id);renderRecords()};td.append(btn);tr.append(td);$("recordRows").append(tr)})}
 async function renderSummary(){let rows=await all();$("stats").innerHTML="";[[rows.length,"Entries"],[new Set(rows.map(x=>x.block)).size,"Blocks"],[rows.reduce((n,x)=>n+(x.members||normalizeMembers([],x.names)).length,0),"Named participants"]].forEach(([n,l])=>{let d=document.createElement("div");d.className="stat";let b=document.createElement("b");b.textContent=n;d.append(b,document.createTextNode(l));$("stats").append(d)});$("categoryRows").innerHTML="";CATS.forEach((c,i)=>{let a=rows.filter(x=>x.categoryIndex===i),tr=document.createElement("tr");[c[0],c[1],a.length,a.reduce((n,x)=>n+(x.members||normalizeMembers([],x.names)).length,0)].forEach(v=>{let td=document.createElement("td");td.textContent=v;tr.append(td)});$("categoryRows").append(tr)});let b={};rows.forEach(x=>b[x.block]=(b[x.block]||0)+1);$("blockSummary").textContent=Object.entries(b).sort((a,b)=>b[1]-a[1]).map(x=>x[0]+": "+x[1]).join(" • ")||"No registrations yet"}
 function download(n,c,t){let a=document.createElement("a"),u=URL.createObjectURL(new Blob([c],{type:t}));a.href=u;a.download=n;a.click();URL.revokeObjectURL(u)}
