@@ -3,3 +3,14 @@
 
 .member-row{grid-template-columns:minmax(180px,2fr) minmax(90px,.7fr) minmax(110px,.8fr);align-items:center}.member-row strong{font-size:14px;color:#17365d}.participants>label{margin-bottom:12px}.participants>label input{font-weight:400}
 @media(max-width:650px){.member-row{grid-template-columns:1fr 1fr}.member-row strong{grid-column:1/-1}}
+
+
+.home-panel{text-align:center;padding:clamp(24px,5vw,56px) 20px}
+.home-panel h1{margin:0 0 10px}
+.home-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;max-width:760px;margin:28px auto 8px}
+.home-option{min-height:190px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;border-radius:18px;padding:24px;background:#17365d;color:#fff;border:1px solid #294e79;box-shadow:0 8px 24px rgba(0,0,0,.10)}
+.home-option.secondary{background:#fff;color:#17365d;border:2px solid #17365d}
+.home-option strong{font-size:1.2rem;letter-spacing:.04em}
+.home-option small{font-size:.9rem;opacity:.85}
+.home-icon{font-size:2.4rem}
+@media(max-width:600px){.home-options{grid-template-columns:1fr}.home-option{min-height:145px}}
