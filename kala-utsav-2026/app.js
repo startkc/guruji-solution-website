@@ -96,11 +96,59 @@ $("saveEvaluation").onclick=async()=>{
  try{await api("evaluation-save","POST",{registration_id:selectedEntry.id,judge_name:selectedJudge,category:selectedEntry.category,discipline,scores,total,remarks:$("judgeRemarks").value});$("evaluationMsg").textContent="Saved successfully. Total: "+total+"/100";await renderJudgeEntries();openJudgeEntry(selectedEntry)}catch(e){alert("Evaluation save failed: "+e.message)}
 };
 
-function showTab(n){document.querySelectorAll(".view").forEach(x=>x.hidden=x.id!==n);document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===n));if(n==="records")renderRecords();if(n==="evaluation")initEvaluation();if(n==="adminAudit")renderAuditLog();if(n==="summary")renderSummary()}
+function showTab(n){document.querySelectorAll(".view").forEach(x=>x.hidden=x.id!==n);document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===n));if(n==="records")renderRecords();if(n==="evaluation")initEvaluation();if(n==="adminAudit")renderAuditLog();if(n==="adminResults")renderAdminResults();if(n==="summary")renderSummary()}
 async function renderRecords(){let rows=await all(),q=$("search").value.toLowerCase();$("recordRows").innerHTML="";rows.filter(x=>JSON.stringify(x).toLowerCase().includes(q)).sort((a,b)=>b.created-a.created).forEach(x=>{let tr=document.createElement("tr");[x.id,x.category,x.date,x.type+": "+(x.names||"" ).replace(/\n/g,", "),x.block,x.school,x.official+(x.synced?"":" • Pending sync")].forEach(v=>{let td=document.createElement("td");td.textContent=v;tr.append(td)});let td=document.createElement("td"),btn=document.createElement("button");btn.textContent="Delete";btn.className="secondary";btn.onclick=async()=>{if(!confirm("Delete this entry?"))return;if(x.synced&&navigator.onLine){try{await api("delete","POST",{id:x.id})}catch(e){return alert("Cloud delete failed: "+e.message)}}await del(x.id);renderRecords()};td.append(btn);tr.append(td);$("recordRows").append(tr)})}
 async function renderSummary(){let rows=await all();$("stats").innerHTML="";[[rows.length,"Entries"],[new Set(rows.map(x=>x.block)).size,"Blocks"],[rows.reduce((n,x)=>n+(x.members||normalizeMembers([],x.names)).length,0),"Named participants"]].forEach(([n,l])=>{let d=document.createElement("div");d.className="stat";let b=document.createElement("b");b.textContent=n;d.append(b,document.createTextNode(l));$("stats").append(d)});$("categoryRows").innerHTML="";CATS.forEach((c,i)=>{let a=rows.filter(x=>x.categoryIndex===i),tr=document.createElement("tr");[c[0],c[1],a.length,a.reduce((n,x)=>n+(x.members||normalizeMembers([],x.names)).length,0)].forEach(v=>{let td=document.createElement("td");td.textContent=v;tr.append(td)});$("categoryRows").append(tr)});let b={};rows.forEach(x=>b[x.block]=(b[x.block]||0)+1);$("blockSummary").textContent=Object.entries(b).sort((a,b)=>b[1]-a[1]).map(x=>x[0]+": "+x[1]).join(" • ")||"No registrations yet"}
 function download(n,c,t){let a=document.createElement("a"),u=URL.createObjectURL(new Blob([c],{type:t}));a.href=u;a.download=n;a.click();URL.revokeObjectURL(u)}
-async function renderAuditLog(){try{const r=await api("audit-list");const rows=r.audit||[];$("auditRows").innerHTML="";rows.forEach(x=>{const tr=document.createElement("tr");[new Date(x.changed_at).toLocaleString("en-IN"),x.judge_name,x.registration_id,x.category,x.action==="EDIT"?"Edited":"First save",x.old_total??"—",x.new_total,JSON.stringify(x.old_scores??"—"),JSON.stringify(x.new_scores),x.new_remarks||""].forEach(v=>{const td=document.createElement("td");td.textContent=v;tr.append(td)});$("auditRows").append(tr)});if(!rows.length)$("auditRows").innerHTML="<tr><td colspan=\"10\">No audit records yet.</td></tr>"}catch(e){alert("Could not load audit log: "+e.message)}}
+
+let adminResultRows=[];
+async function renderAdminResults(){
+ try{
+  const r=await api("admin-results"), regs=r.registrations||[], evs=r.evaluations||[];
+  const byReg=new Map();
+  evs.forEach(e=>{if(!byReg.has(e.registration_id))byReg.set(e.registration_id,[]);byReg.get(e.registration_id).push(e)});
+  const rows=regs.map(reg=>{
+   const discipline=judgeDiscipline(reg.category||"");
+   const judges=Object.keys(JUDGES).filter(n=>JUDGES[n]===discipline);
+   const scores=judges.map(n=>(byReg.get(reg.id)||[]).find(e=>e.judge_name===n));
+   const complete=scores.length===2&&scores.every(Boolean);
+   const avg=complete?(Number(scores[0].total)+Number(scores[1].total))/2:null;
+   return {reg,discipline,judges,scores,complete,avg,rank:null};
+  });
+  const categories=[...new Set(rows.map(x=>x.reg.category))];
+  categories.forEach(cat=>{
+   const ranked=rows.filter(x=>x.reg.category===cat&&x.complete).sort((a,b)=>b.avg-a.avg);
+   let last=null,rank=0;
+   ranked.forEach((x,i)=>{if(last===null||x.avg!==last)rank=i+1;x.rank=rank;last=x.avg});
+  });
+  adminResultRows=rows;
+  const body=$("adminResultRows");body.innerHTML="";
+  rows.sort((a,b)=>String(a.reg.category).localeCompare(String(b.reg.category))||(a.rank||9999)-(b.rank||9999)||String(a.reg.participant_names).localeCompare(String(b.reg.participant_names))).forEach(x=>{
+   const tr=document.createElement("tr");
+   const vals=[x.reg.id,x.reg.category,x.reg.block,x.reg.school,x.reg.participant_names,x.judges[0]||"—",x.scores[0]?.total??"Pending",x.judges[1]||"—",x.scores[1]?.total??"Pending",x.complete?x.avg.toFixed(2):"Pending (2/2 required)",x.rank??"—"];
+   vals.forEach(v=>{const td=document.createElement("td");td.textContent=v;tr.append(td)});
+   body.append(tr);
+  });
+  if(!rows.length)body.innerHTML='<tr><td colspan="11">No registrations found.</td></tr>';
+  $("adminResultsStatus").textContent=rows.length+" registrations • "+evs.length+" judge evaluations • Rank calculated only when both assigned judges have submitted marks.";
+ }catch(e){alert("Could not load admin results: "+e.message)}
+}
+function csvCell(v){return '"'+String(v??"").replace(/"/g,'""')+'"'}
+function exportAdminSummary(){
+ const headers=["Registration ID","Category","Block","School","Participant / Team","Judge 1","Judge 1 Total","Judge 2","Judge 2 Total","Average (2 judges)","Category Rank","Evaluation Status"];
+ const rows=adminResultRows.map(x=>[x.reg.id,x.reg.category,x.reg.block,x.reg.school,x.reg.participant_names,x.judges[0]||"",x.scores[0]?.total??"",x.judges[1]||"",x.scores[1]?.total??"",x.avg??"",x.rank??"",x.complete?"Complete":"Pending"]);
+ download("Kala_Utsav_Category_Rankings.csv","\\ufeff"+[headers,...rows].map(r=>r.map(csvCell).join(",")).join("\\r\\n"),"text/csv;charset=utf-8");
+}
+function exportAdminDetailed(){
+ const headers=["Registration ID","Category","Block","School","Participant / Team","Judge","Discipline","Criterion","Marks","Maximum Marks","Total","Remarks","Updated At"];
+ const rows=[];
+ adminResultRows.forEach(x=>x.scores.forEach(ev=>{if(!ev)return;(RUBRICS[ev.discipline]||[]).forEach((criterion,i)=>rows.push([x.reg.id,x.reg.category,x.reg.block,x.reg.school,x.reg.participant_names,ev.judge_name,ev.discipline,criterion[0],ev.scores?.[i]??"",criterion[1],ev.total,ev.remarks||"",ev.updated_at||""]))}));
+ download("Kala_Utsav_Detailed_Evaluation_Marks.csv","\\ufeff"+[headers,...rows].map(r=>r.map(csvCell).join(",")).join("\\r\\n"),"text/csv;charset=utf-8");
+}
+$("refreshAdminResults").onclick=renderAdminResults;
+$("exportAdminSummary").onclick=exportAdminSummary;
+$("exportAdminDetailed").onclick=exportAdminDetailed;
+\nasync function renderAuditLog(){try{const r=await api("audit-list");const rows=r.audit||[];$("auditRows").innerHTML="";rows.forEach(x=>{const tr=document.createElement("tr");[new Date(x.changed_at).toLocaleString("en-IN"),x.judge_name,x.registration_id,x.category,x.action==="EDIT"?"Edited":"First save",x.old_total??"—",x.new_total,JSON.stringify(x.old_scores??"—"),JSON.stringify(x.new_scores),x.new_remarks||""].forEach(v=>{const td=document.createElement("td");td.textContent=v;tr.append(td)});$("auditRows").append(tr)});if(!rows.length)$("auditRows").innerHTML="<tr><td colspan=\"10\">No audit records yet.</td></tr>"}catch(e){alert("Could not load audit log: "+e.message)}}
 $("refreshAudit").onclick=renderAuditLog;
 function chooseAccess(mode){
  accessMode=mode;$("home").hidden=true;$("login").hidden=false;$("app").hidden=true;
@@ -113,7 +161,7 @@ $("openRegistration").onclick=()=>chooseAccess("registration");
 $("openEvaluation").onclick=()=>chooseAccess("evaluation");
 $("openAdmin").onclick=()=>chooseAccess("admin");
 $("backHome").onclick=()=>{$("login").hidden=true;$("app").hidden=true;$("home").hidden=false};
-$("loginBtn").onclick=async()=>{official=$("operator").value;let pin=$("pin").value.trim();if(accessMode==="registration"&&!official)return alert("Select registration official");if(accessMode==="evaluation"&&!$("judgeLoginSelect").value)return alert("Select your judge name");if(!/^\d{6}$/.test(pin))return alert("Enter the six-digit PIN");$("loginBtn").disabled=true;try{const loginAction=accessMode==="admin"?"admin-login":accessMode==="evaluation"?"judge-login":"login";let r=await api(loginAction,"POST",{pin,judge_name:$("judgeLoginSelect").value});token=r.token;if(accessMode==="evaluation")selectedJudge=r.judge_name;sessionStorage.setItem("kalaSession",token);$("pin").value="";$("login").hidden=true;$("home").hidden=true;$("app").hidden=false;$("welcome").textContent=accessMode==="admin"?"Admin Audit Access":accessMode==="evaluation"?"Judge Evaluation Access":"Registration official: "+official;document.querySelectorAll(".tab").forEach(b=>{const ev=b.dataset.tab==="evaluation",ad=b.dataset.tab==="adminAudit";b.hidden=accessMode==="admin"?!ad:accessMode==="evaluation"?!ev:(ev||ad)});if(accessMode==="admin")showTab("adminAudit");else if(accessMode==="evaluation")showTab("evaluation");else showTab("register");if(accessMode==="registration"){await refreshCloud();await loadSchoolSuggestions()}refreshConnection()}catch(e){alert("Login failed: "+e.message)}finally{$("loginBtn").disabled=false}};
+$("loginBtn").onclick=async()=>{official=$("operator").value;let pin=$("pin").value.trim();if(accessMode==="registration"&&!official)return alert("Select registration official");if(accessMode==="evaluation"&&!$("judgeLoginSelect").value)return alert("Select your judge name");if(!/^\d{6}$/.test(pin))return alert("Enter the six-digit PIN");$("loginBtn").disabled=true;try{const loginAction=accessMode==="admin"?"admin-login":accessMode==="evaluation"?"judge-login":"login";let r=await api(loginAction,"POST",{pin,judge_name:$("judgeLoginSelect").value});token=r.token;if(accessMode==="evaluation")selectedJudge=r.judge_name;sessionStorage.setItem("kalaSession",token);$("pin").value="";$("login").hidden=true;$("home").hidden=true;$("app").hidden=false;$("welcome").textContent=accessMode==="admin"?"Admin Audit Access":accessMode==="evaluation"?"Judge Evaluation Access":"Registration official: "+official;document.querySelectorAll(".tab").forEach(b=>{const ev=b.dataset.tab==="evaluation",ad=b.dataset.tab==="adminAudit",ar=b.dataset.tab==="adminResults";b.hidden=accessMode==="admin"?!(ad||ar):accessMode==="evaluation"?!ev:(ev||ad||ar)});if(accessMode==="admin")showTab("adminResults");else if(accessMode==="evaluation")showTab("evaluation");else showTab("register");if(accessMode==="registration"){await refreshCloud();await loadSchoolSuggestions()}refreshConnection()}catch(e){alert("Login failed: "+e.message)}finally{$("loginBtn").disabled=false}};
 $("logout").onclick=()=>{token="";sessionStorage.removeItem("kalaSession");$("app").hidden=true;$("login").hidden=true;$("home").hidden=false;$("operator").parentElement.style.display="";$("judgeLoginSelect").value="";$("judgeLoginSelect").disabled=false;selectedJudge="";document.querySelectorAll(".tab").forEach(b=>b.hidden=b.dataset.tab==="adminAudit")};
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));$("art").onchange=()=>{updateDates();updateEntryType()};$("block").onchange=()=>{renderSchoolSuggestions();renderParticipantSuggestions()};$("school").onchange=()=>{let match=schoolSuggestions.find(s=>s.school.toLowerCase()===$("school").value.trim().toLowerCase()&&String(s.block).toUpperCase()===$("block").value.toUpperCase());if(match&&match.udise){$("udise").value=String(match.udise);$("schoolHint").textContent="UDISE auto-filled from reference list. Please verify."}else{$("udise").value="";$("schoolHint").textContent="School details are unverified. Check spelling and UDISE before saving."}};
 $("participantNames").oninput=()=>{let typed=$("participantNames").value.trim().toLowerCase();let match=participantSuggestions.find(p=>String(p.names||"").trim().toLowerCase()===typed&&(!p.category||p.category===CATS[+$("art").value][0]));if(match){if(match.block)$("block").value=match.block;renderSchoolSuggestions();if(match.school)$("school").value=match.school;if(match.udise)$("udise").value=String(match.udise);if(match.class&&["9","10","11","12"].includes(String(match.class)))$("leaderClass").value=String(match.class);if(match.gender){let g=String(match.gender).toUpperCase();$("leaderGender").value=g==="BOY"||g==="MALE"?"Male":g==="GIRL"||g==="FEMALE"?"Female":"Other"}$("schoolHint").textContent="Matched previous registration reference. Please verify details."}};
