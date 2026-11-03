@@ -56,7 +56,17 @@ Deno.serve(async (req) => {
   try { const decoded = atob(payloadPart.replace(/-/g, "+").replace(/_/g, "/")); const sessionData = JSON.parse(decoded); sessionRole = sessionData.role || "user"; sessionJudgeName = String(sessionData.judge_name || ""); } catch { return json({ error: "Invalid session" }, 401); }
   const db = createClient(url, serviceKey, { auth: { persistSession: false } });
   if (sessionRole === "judge" && !["evaluation-list","evaluation-save"].includes(path)) return json({ error: "Judge access is limited to evaluation" }, 403);
-  if (sessionRole === "admin" && path !== "audit-list") return json({ error: "Admin access is limited to audit log" }, 403);
+  if (sessionRole === "admin" && !["audit-list","admin-results"].includes(path)) return json({ error: "Admin access is limited to admin reports" }, 403);
+  if (path === "admin-results" && req.method === "GET") {
+    if (sessionRole !== "admin") return json({ error: "Admin access required" }, 403);
+    const [{ data: registrations, error: regError }, { data: evaluations, error: evalError }] = await Promise.all([
+      db.from("kala_registrations").select("*").order("created_at", { ascending: false }),
+      db.from("kala_evaluations").select("*").order("updated_at", { ascending: false })
+    ]);
+    if (regError) return json({ error: regError.message }, 500);
+    if (evalError) return json({ error: evalError.message }, 500);
+    return json({ registrations: registrations || [], evaluations: evaluations || [] });
+  }
   if (path === "audit-list" && req.method === "GET") {
     if (sessionRole !== "admin") return json({ error: "Admin access required" }, 403);
     const { data, error } = await db.from("kala_evaluation_audit").select("*").order("changed_at", { ascending: false }).limit(2000);
