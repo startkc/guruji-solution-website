@@ -7,7 +7,7 @@ function openDB(){return new Promise((ok,no)=>{let q=indexedDB.open(DB,1);q.onup
 function all(){return new Promise((ok,no)=>{let q=db.transaction(STORE).objectStore(STORE).getAll();q.onsuccess=()=>ok(q.result);q.onerror=()=>no(q.error)})}
 function put(v){return new Promise((ok,no)=>{let q=db.transaction(STORE,"readwrite").objectStore(STORE).put(v);q.onsuccess=()=>ok();q.onerror=()=>no(q.error)})}
 function del(id){return new Promise((ok,no)=>{let q=db.transaction(STORE,"readwrite").objectStore(STORE).delete(id);q.onsuccess=()=>ok();q.onerror=()=>no(q.error)})}
-async function api(action,method="GET",data=null){let h={"Content-Type":"application/json"};if(token)h.Authorization="Bearer "+token;let u=API+(method==="GET"?"?action="+encodeURIComponent(action):"");let r=await fetch(u,{method,headers:h,body:method==="GET"?undefined:JSON.stringify({...data,action})});let j=await r.json().catch(()=>({error:"Invalid server response"}));if(!r.ok)throw new Error(j.error||("HTTP "+r.status));return j}
+async function api(action,method="GET",data=null){let h={"Content-Type":"application/json"};if(token)h.Authorization="Bearer "+token;let u=API+(method==="GET"?"?action="+encodeURIComponent(action)+(data&&data.judge?"&judge="+encodeURIComponent(data.judge):""):"");let r=await fetch(u,{method,headers:h,body:method==="GET"?undefined:JSON.stringify({...data,action})});let j=await r.json().catch(()=>({error:"Invalid server response"}));if(!r.ok)throw new Error(j.error||("HTTP "+r.status));return j}
 function normalizeMembers(members,names=""){if(Array.isArray(members)&&members.length)return members;return String(names||"").split(/\r?\n/).map(n=>n.trim()).filter(Boolean).map((name,i)=>({name,class:"",gender:"",leader:i===0}))}
 function cloudToLocal(x){return{id:x.id,categoryIndex:x.category_index,category:x.category,date:x.event_date,type:x.entry_type,names:x.participant_names,members:normalizeMembers(x.participant_details,x.participant_names),block:x.block,school:x.school,udise:x.udise||"",schoolVerified:!!x.school_verified,schoolSource:x.school_source||"legacy",remarks:x.remarks||"",official:x.official,created:Date.parse(x.created_at)||Date.now(),synced:true}}
 function localToCloud(x){return{id:x.id,category_index:x.categoryIndex,category:x.category,event_date:x.date,entry_type:x.type,participant_names:x.names,participant_details:x.members||[],school_verified:!!x.schoolVerified,school_source:x.schoolSource||"manual",block:x.block,school:x.school,udise:x.udise,remarks:x.remarks,official:x.official}}
@@ -52,7 +52,7 @@ async function initEvaluation(){
 async function renderJudgeEntries(){
  const rows=await all(),idx=+$("judgeArt").value,cat=CATS[idx]?.[0];$("judgeEntryList").innerHTML="";$("judgeScorePanel").hidden=true;
  if(!cat)return;
- let ev=[];try{const x=await api("evaluation-list");ev=x.evaluations||[]}catch(e){$("judgeEntryList").textContent="Evaluation service not ready: "+e.message;return}
+ let ev=[];try{const x=await api("evaluation-list","GET",{judge:selectedJudge});ev=x.evaluations||[]}catch(e){$("judgeEntryList").textContent="Evaluation service not ready: "+e.message;return}
  existingEvaluations=ev;
  rows.filter(x=>x.category===cat).sort((a,b)=>a.names.localeCompare(b.names)).forEach(x=>{
   const b=document.createElement("button");b.type="button";b.className="secondary";b.style.display="block";b.style.width="100%";b.style.textAlign="left";b.style.margin="8px 0";
