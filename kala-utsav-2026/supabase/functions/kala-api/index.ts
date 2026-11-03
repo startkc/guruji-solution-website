@@ -28,20 +28,31 @@ async function validToken(token: string, secret: string) {
 }
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
-  const pin = Deno.env.get("KALA_PIN"), sessionSecret = Deno.env.get("KALA_SESSION_SECRET");
+  const pin = Deno.env.get("KALA_PIN"), adminPin = Deno.env.get("KALA_ADMIN_PIN"), sessionSecret = Deno.env.get("KALA_SESSION_SECRET");
   const url = Deno.env.get("SUPABASE_URL"), serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!pin || !sessionSecret || !url || !serviceKey) return json({ error: "Server configuration incomplete" }, 500);
   let body: Record<string, unknown> = {};
   if (req.method !== "GET") { try { body = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400); } }
   const path = new URL(req.url).searchParams.get("action") || String(body.action || "");
-  if (path === "login" && req.method === "POST") {
-    if (String(body.pin || "") !== pin) return json({ error: "Incorrect PIN" }, 401);
-    const payload = b64(enc.encode(JSON.stringify({ exp: Date.now() + 8 * 60 * 60 * 1000 })));
+  if ((path === "login" || path === "admin-login") && req.method === "POST") {
+    const isAdminLogin = path === "admin-login";
+    if (isAdminLogin ? (!adminPin || String(body.pin || "") !== adminPin) : String(body.pin || "") !== pin)
+      return json({ error: isAdminLogin ? "Incorrect Admin PIN or Admin PIN is not configured" : "Incorrect PIN" }, 401);
+    const payload = b64(enc.encode(JSON.stringify({ role: isAdminLogin ? "admin" : "user", exp: Date.now() + 8 * 60 * 60 * 1000 })));
     return json({ token: payload + "." + await sign(payload, sessionSecret), expiresIn: 28800 });
   }
   const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
   if (!(await validToken(token, sessionSecret))) return json({ error: "Session expired or invalid" }, 401);
+  const payloadPart = token.split(".")[0] || "";
+  let sessionRole = "user";
+  try { const decoded = atob(payloadPart.replace(/-/g, "+").replace(/_/g, "/")); sessionRole = JSON.parse(decoded).role || "user"; } catch { return json({ error: "Invalid session" }, 401); }
   const db = createClient(url, serviceKey, { auth: { persistSession: false } });
+  if (path === "audit-list" && req.method === "GET") {
+    if (sessionRole !== "admin") return json({ error: "Admin access required" }, 403);
+    const { data, error } = await db.from("kala_evaluation_audit").select("*").order("changed_at", { ascending: false }).limit(2000);
+    if (error) return json({ error: error.message }, 500);
+    return json({ audit: data || [] });
+  }
 
 
   const judgeDiscipline = (category: string) => category.includes("संगीत गायन") ? "संगीत गायन" :
@@ -82,10 +93,19 @@ Deno.serve(async (req) => {
     const { data: registration, error: regError } = await db.from("kala_registrations").select("id,category").eq("id", registrationId).maybeSingle();
     if (regError) return json({ error: regError.message }, 500);
     if (!registration || registration.category !== category) return json({ error: "Registration not found or category mismatch" }, 404);
+    const { data: previous } = await db.from("kala_evaluations").select("*").eq("registration_id", registrationId).eq("judge_name", judge).maybeSingle();
     const { data, error } = await db.from("kala_evaluations").upsert({
       registration_id: registrationId, judge_name: judge, category, discipline, scores, total, remarks, updated_at: new Date().toISOString()
     }, { onConflict: "registration_id,judge_name" }).select().single();
     if (error) return json({ error: error.message }, 500);
+    const { error: auditError } = await db.from("kala_evaluation_audit").insert({
+      registration_id: registrationId, judge_name: judge, category, discipline,
+      old_scores: previous?.scores ?? null, new_scores: scores,
+      old_total: previous?.total ?? null, new_total: total,
+      old_remarks: previous?.remarks ?? null, new_remarks: remarks,
+      action: previous ? "EDIT" : "CREATE"
+    });
+    if (auditError) return json({ error: "Score saved but audit logging failed: " + auditError.message }, 500);
     return json({ evaluation: data });
   }
 
