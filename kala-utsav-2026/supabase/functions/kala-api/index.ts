@@ -28,25 +28,34 @@ async function validToken(token: string, secret: string) {
 }
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
-  const pin = Deno.env.get("KALA_PIN"), adminPin = Deno.env.get("KALA_ADMIN_PIN"), sessionSecret = Deno.env.get("KALA_SESSION_SECRET");
+  const pin = Deno.env.get("KALA_PIN"), adminPin = Deno.env.get("KALA_ADMIN_PIN"), judgePinsRaw = Deno.env.get("KALA_JUDGE_PINS"), sessionSecret = Deno.env.get("KALA_SESSION_SECRET");
   const url = Deno.env.get("SUPABASE_URL"), serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!pin || !sessionSecret || !url || !serviceKey) return json({ error: "Server configuration incomplete" }, 500);
   let body: Record<string, unknown> = {};
   if (req.method !== "GET") { try { body = await req.json(); } catch { return json({ error: "Invalid JSON" }, 400); } }
   const path = new URL(req.url).searchParams.get("action") || String(body.action || "");
-  if ((path === "login" || path === "admin-login") && req.method === "POST") {
-    const isAdminLogin = path === "admin-login";
-    if (isAdminLogin ? (!adminPin || String(body.pin || "") !== adminPin) : String(body.pin || "") !== pin)
+  if ((path === "login" || path === "admin-login" || path === "judge-login") && req.method === "POST") {
+    const isAdminLogin = path === "admin-login", isJudgeLogin = path === "judge-login";
+    let judgeName = "";
+    if (isJudgeLogin) {
+      judgeName = String(body.judge_name || "");
+      let judgePins: Record<string,string> = {};
+      try { judgePins = JSON.parse(judgePinsRaw || "{}"); } catch { return json({ error: "Judge PIN configuration is invalid JSON" }, 500); }
+      if (!judgeName || !/^\d{6}$/.test(String(body.pin || "")) || judgePins[judgeName] !== String(body.pin || ""))
+        return json({ error: "Incorrect judge name or individual PIN" }, 401);
+    } else if (isAdminLogin ? (!adminPin || String(body.pin || "") !== adminPin) : String(body.pin || "") !== pin) {
       return json({ error: isAdminLogin ? "Incorrect Admin PIN or Admin PIN is not configured" : "Incorrect PIN" }, 401);
-    const payload = b64(enc.encode(JSON.stringify({ role: isAdminLogin ? "admin" : "user", exp: Date.now() + 8 * 60 * 60 * 1000 })));
-    return json({ token: payload + "." + await sign(payload, sessionSecret), expiresIn: 28800 });
+    }
+    const payload = b64(enc.encode(JSON.stringify({ role: isAdminLogin ? "admin" : isJudgeLogin ? "judge" : "user", ...(isJudgeLogin ? { judge_name: judgeName } : {}), exp: Date.now() + 8 * 60 * 60 * 1000 })));
+    return json({ token: payload + "." + await sign(payload, sessionSecret), expiresIn: 28800, ...(isJudgeLogin ? { judge_name: judgeName } : {}) });
   }
   const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
   if (!(await validToken(token, sessionSecret))) return json({ error: "Session expired or invalid" }, 401);
   const payloadPart = token.split(".")[0] || "";
-  let sessionRole = "user";
-  try { const decoded = atob(payloadPart.replace(/-/g, "+").replace(/_/g, "/")); sessionRole = JSON.parse(decoded).role || "user"; } catch { return json({ error: "Invalid session" }, 401); }
+  let sessionRole = "user", sessionJudgeName = "";
+  try { const decoded = atob(payloadPart.replace(/-/g, "+").replace(/_/g, "/")); const sessionData = JSON.parse(decoded); sessionRole = sessionData.role || "user"; sessionJudgeName = String(sessionData.judge_name || ""); } catch { return json({ error: "Invalid session" }, 401); }
   const db = createClient(url, serviceKey, { auth: { persistSession: false } });
+  if (sessionRole === "judge" && !["evaluation-list","evaluation-save"].includes(path)) return json({ error: "Judge access is limited to evaluation" }, 403);
   if (path === "audit-list" && req.method === "GET") {
     if (sessionRole !== "admin") return json({ error: "Admin access required" }, 403);
     const { data, error } = await db.from("kala_evaluation_audit").select("*").order("changed_at", { ascending: false }).limit(2000);
@@ -68,6 +77,7 @@ Deno.serve(async (req) => {
   };
   if (path === "evaluation-list" && req.method === "GET") {
     const judge = new URL(req.url).searchParams.get("judge") || "";
+    if (sessionRole !== "judge" || judge !== sessionJudgeName) return json({ error: "Judge identity mismatch" }, 403);
     if (!judgeAssignments[judge]) return json({ error: "Unknown judge" }, 400);
     const { data, error } = await db.from("kala_evaluations").select("*").eq("judge_name", judge);
     if (error) return json({ error: error.message }, 500);
@@ -75,6 +85,7 @@ Deno.serve(async (req) => {
   }
   if (path === "evaluation-save" && req.method === "POST") {
     const judge = String(body.judge_name || ""), registrationId = String(body.registration_id || "");
+    if (sessionRole !== "judge" || judge !== sessionJudgeName) return json({ error: "Judge identity mismatch" }, 403);
     const category = String(body.category || ""), discipline = String(body.discipline || "");
     const scores = body.scores, remarks = String(body.remarks || "");
     if (!judgeAssignments[judge] || !registrationId || !Array.isArray(scores))
