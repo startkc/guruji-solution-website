@@ -48,7 +48,8 @@ async function initEvaluation(){
  Object.keys(JUDGES).forEach(n=>js.add(new Option(n,n)));
  if(accessMode==="evaluation"){js.value=selectedJudge;js.disabled=true;}else{js.disabled=false;}
  js.onchange=()=>{selectedJudge=js.value;as.innerHTML='<option value="">Select art form</option>';if(selectedJudge)CATS.forEach((cat,i)=>{if(judgeDiscipline(cat[0])===JUDGES[selectedJudge])as.add(new Option(cat[0],i))});$("judgeEntryList").innerHTML="";$("judgeScorePanel").hidden=true};
- as.onchange=renderJudgeEntries; $("exportEvaluationMarks").onclick=exportEvaluationMarks;
+ as.onchange=renderJudgeEntries;
+ if(accessMode==="evaluation"&&selectedJudge){js.value=selectedJudge;js.disabled=true;js.onchange();} $("exportEvaluationMarks").onclick=exportEvaluationMarks;
 }
 async function renderJudgeEntries(){
  const rows=await all(),idx=+$("judgeArt").value,cat=CATS[idx]?.[0];$("judgeEntryList").innerHTML="";$("judgeScorePanel").hidden=true;
