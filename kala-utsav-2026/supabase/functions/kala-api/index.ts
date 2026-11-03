@@ -43,6 +43,52 @@ Deno.serve(async (req) => {
   if (!(await validToken(token, sessionSecret))) return json({ error: "Session expired or invalid" }, 401);
   const db = createClient(url, serviceKey, { auth: { persistSession: false } });
 
+
+  const judgeDiscipline = (category: string) => category.includes("संगीत गायन") ? "संगीत गायन" :
+    category.includes("संगीत वादन") ? "संगीत वादन" : category.includes("नृत्य") ? "नृत्य" :
+    category.includes("नाटक") ? "नाटक" : category.includes("दृश्य कला") ? "दृश्य कला" : "पारंपरिक कहानी वाचन";
+  const judgeAssignments: Record<string,string> = {
+    "श्री विश्वजीत कुमार":"संगीत गायन","श्रीमती पूजा कुमारी":"संगीत गायन",
+    "श्री तारा कांत सिंह":"संगीत वादन","श्री राहुल कुमार":"संगीत वादन",
+    "श्रीमती सोनी कुमारी":"नृत्य","श्रीमती उर्मिला मिश्रा":"नृत्य",
+    "श्री उमेश कुमार प्रसाद सिंह":"नाटक","श्री संजीव कुमार शर्मा":"नाटक",
+    "श्रीमती ललिता भारती":"दृश्य कला","श्रीमती अर्चना कुमारी":"दृश्य कला",
+    "श्री अमरेश कुमार":"पारंपरिक कहानी वाचन","श्री सुधाकर कांत चक्रवर्ती":"पारंपरिक कहानी वाचन"
+  };
+  if (path === "evaluation-list" && req.method === "GET") {
+    const judge = new URL(req.url).searchParams.get("judge") || "";
+    if (!judgeAssignments[judge]) return json({ error: "Unknown judge" }, 400);
+    const { data, error } = await db.from("kala_evaluations").select("*").eq("judge_name", judge);
+    if (error) return json({ error: error.message }, 500);
+    return json({ evaluations: data || [] });
+  }
+  if (path === "evaluation-save" && req.method === "POST") {
+    const judge = String(body.judge_name || ""), registrationId = String(body.registration_id || "");
+    const category = String(body.category || ""), discipline = String(body.discipline || "");
+    const scores = body.scores, remarks = String(body.remarks || "");
+    if (!judgeAssignments[judge] || !registrationId || !Array.isArray(scores))
+      return json({ error: "Missing or invalid evaluation fields" }, 400);
+    if (judgeAssignments[judge] !== judgeDiscipline(category) || discipline !== judgeAssignments[judge])
+      return json({ error: "This judge is not assigned to this art form" }, 403);
+    const limits: Record<string,number[]> = {
+      "संगीत गायन":[20,20,20,20,20],"संगीत वादन":[20,20,20,20,20],
+      "नृत्य":[20,20,10,20,10,20],"नाटक":[10,20,15,15,20,20],
+      "दृश्य कला":[20,20,20,20,20],"पारंपरिक कहानी वाचन":[20,20,10,10,20,20]
+    };
+    const maxes = limits[discipline];
+    if (scores.length !== maxes.length || scores.some((v: unknown,i: number) => !Number.isInteger(v) || Number(v)<0 || Number(v)>maxes[i]))
+      return json({ error: "Scores do not match the official rubric" }, 400);
+    const total = scores.reduce((a: number,b: number) => a + Number(b), 0);
+    const { data: registration, error: regError } = await db.from("kala_registrations").select("id,category").eq("id", registrationId).maybeSingle();
+    if (regError) return json({ error: regError.message }, 500);
+    if (!registration || registration.category !== category) return json({ error: "Registration not found or category mismatch" }, 404);
+    const { data, error } = await db.from("kala_evaluations").upsert({
+      registration_id: registrationId, judge_name: judge, category, discipline, scores, total, remarks, updated_at: new Date().toISOString()
+    }, { onConflict: "registration_id,judge_name" }).select().single();
+    if (error) return json({ error: error.message }, 500);
+    return json({ evaluation: data });
+  }
+
   if (path === "list" && req.method === "GET") {
     const { data, error } = await db.from("kala_registrations").select("*").order("created_at", { ascending: false });
     if (error) return json({ error: error.message }, 500);
