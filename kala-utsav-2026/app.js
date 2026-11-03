@@ -107,7 +107,7 @@ function chooseAccess(mode){
  const evalMode=mode==="evaluation",adminMode=mode==="admin";
  $("loginHeading").textContent=adminMode?"Admin Audit Access":evalMode?"Judge Evaluation Access":"Registration Access";$("pinLabel").firstChild.textContent=adminMode?"Admin PIN":evalMode?"Judge PIN":"Shared PIN";
  $("loginDescription").textContent=adminMode?"Enter the separate six-digit Admin PIN to view score edit history.":evalMode?"Select your name and enter your individual six-digit Judge PIN.":"Enter the shared six-digit PIN and select your registration official.";
- $("operator").parentElement.style.display=evalMode||adminMode?"none":"";$("judgeLoginField").hidden=!evalMode;$("backHome").hidden=false;
+ $("operator").parentElement.style.display=evalMode||adminMode?"none":"";$("judgeLoginField").hidden=!evalMode;$("judgeLoginField").style.display=evalMode?"block":"none";$("backHome").hidden=false;
 }
 $("openRegistration").onclick=()=>chooseAccess("registration");
 $("openEvaluation").onclick=()=>chooseAccess("evaluation");
