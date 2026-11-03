@@ -148,7 +148,8 @@ function exportAdminDetailed(){
 $("refreshAdminResults").onclick=renderAdminResults;
 $("exportAdminSummary").onclick=exportAdminSummary;
 $("exportAdminDetailed").onclick=exportAdminDetailed;
-\nasync function renderAuditLog(){try{const r=await api("audit-list");const rows=r.audit||[];$("auditRows").innerHTML="";rows.forEach(x=>{const tr=document.createElement("tr");[new Date(x.changed_at).toLocaleString("en-IN"),x.judge_name,x.registration_id,x.category,x.action==="EDIT"?"Edited":"First save",x.old_total??"—",x.new_total,JSON.stringify(x.old_scores??"—"),JSON.stringify(x.new_scores),x.new_remarks||""].forEach(v=>{const td=document.createElement("td");td.textContent=v;tr.append(td)});$("auditRows").append(tr)});if(!rows.length)$("auditRows").innerHTML="<tr><td colspan=\"10\">No audit records yet.</td></tr>"}catch(e){alert("Could not load audit log: "+e.message)}}
+
+async function renderAuditLog(){try{const r=await api("audit-list");const rows=r.audit||[];$("auditRows").innerHTML="";rows.forEach(x=>{const tr=document.createElement("tr");[new Date(x.changed_at).toLocaleString("en-IN"),x.judge_name,x.registration_id,x.category,x.action==="EDIT"?"Edited":"First save",x.old_total??"—",x.new_total,JSON.stringify(x.old_scores??"—"),JSON.stringify(x.new_scores),x.new_remarks||""].forEach(v=>{const td=document.createElement("td");td.textContent=v;tr.append(td)});$("auditRows").append(tr)});if(!rows.length)$("auditRows").innerHTML="<tr><td colspan=\"10\">No audit records yet.</td></tr>"}catch(e){alert("Could not load audit log: "+e.message)}}
 $("refreshAudit").onclick=renderAuditLog;
 function chooseAccess(mode){
  accessMode=mode;$("home").hidden=true;$("login").hidden=false;$("app").hidden=true;
