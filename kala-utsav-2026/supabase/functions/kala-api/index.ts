@@ -56,6 +56,7 @@ Deno.serve(async (req) => {
   try { const decoded = atob(payloadPart.replace(/-/g, "+").replace(/_/g, "/")); const sessionData = JSON.parse(decoded); sessionRole = sessionData.role || "user"; sessionJudgeName = String(sessionData.judge_name || ""); } catch { return json({ error: "Invalid session" }, 401); }
   const db = createClient(url, serviceKey, { auth: { persistSession: false } });
   if (sessionRole === "judge" && !["evaluation-list","evaluation-save"].includes(path)) return json({ error: "Judge access is limited to evaluation" }, 403);
+  if (sessionRole === "admin" && path !== "audit-list") return json({ error: "Admin access is limited to audit log" }, 403);
   if (path === "audit-list" && req.method === "GET") {
     if (sessionRole !== "admin") return json({ error: "Admin access required" }, 403);
     const { data, error } = await db.from("kala_evaluation_audit").select("*").order("changed_at", { ascending: false }).limit(2000);
