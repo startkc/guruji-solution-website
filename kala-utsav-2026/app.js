@@ -108,7 +108,8 @@ function chooseAccess(mode){
  $("operator").parentElement.style.display=evalMode||adminMode?"none":"";$("backHome").hidden=false;
 }
 $("openRegistration").onclick=()=>chooseAccess("registration");
-$("openEvaluation").onclick=()=>chooseAccess("evaluation");\n$("openAdmin").onclick=()=>chooseAccess("admin");
+$("openEvaluation").onclick=()=>chooseAccess("evaluation");
+$("openAdmin").onclick=()=>chooseAccess("admin");
 $("backHome").onclick=()=>{$("login").hidden=true;$("app").hidden=true;$("home").hidden=false};
 $("loginBtn").onclick=async()=>{official=$("operator").value;let pin=$("pin").value.trim();if(accessMode==="registration"&&!official)return alert("Select registration official");if(!/^\d{6}$/.test(pin))return alert("Enter the six-digit shared PIN");$("loginBtn").disabled=true;try{let r=await api(accessMode==="admin"?"admin-login":"login","POST",{pin});token=r.token;sessionStorage.setItem("kalaSession",token);$("pin").value="";$("login").hidden=true;$("home").hidden=true;$("app").hidden=false;$("welcome").textContent=accessMode==="admin"?"Admin Audit Access":accessMode==="evaluation"?"Judge Evaluation Access":"Registration official: "+official;document.querySelectorAll(".tab").forEach(b=>{const ev=b.dataset.tab==="evaluation",ad=b.dataset.tab==="adminAudit";b.hidden=accessMode==="admin"?!ad:accessMode==="evaluation"?!ev:(ev||ad)});if(accessMode==="admin")showTab("adminAudit");else if(accessMode==="evaluation")showTab("evaluation");else showTab("register");if(accessMode!=="admin"){await refreshCloud();await loadSchoolSuggestions()}refreshConnection()}catch(e){alert("Login failed: "+e.message)}finally{$("loginBtn").disabled=false}};
 $("logout").onclick=()=>{token="";sessionStorage.removeItem("kalaSession");$("app").hidden=true;$("login").hidden=true;$("home").hidden=false;$("operator").parentElement.style.display="";document.querySelectorAll(".tab").forEach(b=>b.hidden=b.dataset.tab==="adminAudit")};
