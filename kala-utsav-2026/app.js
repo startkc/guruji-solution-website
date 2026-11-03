@@ -47,13 +47,13 @@ async function initEvaluation(){
  const js=$("judgeSelect"),as=$("judgeArt");js.innerHTML='<option value="">Select judge</option>';
  Object.keys(JUDGES).forEach(n=>js.add(new Option(n,n)));
  js.onchange=()=>{selectedJudge=js.value;as.innerHTML='<option value="">Select art form</option>';if(selectedJudge)CATS.forEach((cat,i)=>{if(judgeDiscipline(cat[0])===JUDGES[selectedJudge])as.add(new Option(cat[0],i))});$("judgeEntryList").innerHTML="";$("judgeScorePanel").hidden=true};
- as.onchange=renderJudgeEntries;
+ as.onchange=renderJudgeEntries; $("exportEvaluationMarks").onclick=exportEvaluationMarks;
 }
 async function renderJudgeEntries(){
  const rows=await all(),idx=+$("judgeArt").value,cat=CATS[idx]?.[0];$("judgeEntryList").innerHTML="";$("judgeScorePanel").hidden=true;
  if(!cat)return;
  let ev=[];try{const x=await api("evaluation-list","GET",{judge:selectedJudge});ev=x.evaluations||[]}catch(e){$("judgeEntryList").textContent="Evaluation service not ready: "+e.message;return}
- existingEvaluations=ev;
+ existingEvaluations=ev;allCacheForExport=rows;
  rows.filter(x=>x.category===cat).sort((a,b)=>a.names.localeCompare(b.names)).forEach(x=>{
   const b=document.createElement("button");b.type="button";b.className="secondary";b.style.display="block";b.style.width="100%";b.style.textAlign="left";b.style.margin="8px 0";
   const done=ev.some(v=>v.registration_id===x.id&&v.judge_name===selectedJudge);
@@ -61,6 +61,23 @@ async function renderJudgeEntries(){
  });
  if(!$("judgeEntryList").children.length)$("judgeEntryList").textContent="No registrations found in this category.";
 }
+
+function exportEvaluationMarks(){
+ if(!selectedJudge){alert("Select a judge first.");return}
+ if(!$("judgeArt").value && $("judgeArt").value!=="0"){alert("Select an art category first.");return}
+ if(!existingEvaluations.length){alert("No evaluation marks are available to export for this category yet.");return}
+ const headers=["Registration ID","Judge","Category","Discipline","Participant / Team","Block","School","Criterion","Marks","Maximum Marks","Total","Remarks"];
+ const rows=[];
+ const registrations=allCacheForExport||[];
+ existingEvaluations.forEach(ev=>{
+  const reg=registrations.find(x=>x.id===ev.registration_id)||{};
+  const rubric=RUBRICS[ev.discipline]||[];
+  rubric.forEach((item,i)=>rows.push([ev.registration_id,ev.judge_name,ev.category,ev.discipline,reg.names||"",reg.block||"",reg.school||"",item[0],ev.scores?.[i]??"",item[1],ev.total,ev.remarks||""]));
+ });
+ const csv=[headers,...rows].map(row=>row.map(v=>'"'+String(v??"").replace(/"/g,'""')+'"').join(",")).join("\r\n");
+ download("Kala_Utsav_Evaluation_"+selectedJudge.replace(/[^\\p{L}\\p{N}]+/gu,"_")+".csv","\\ufeff"+csv,"text/csv;charset=utf-8");
+}
+let allCacheForExport=[];
 async function openJudgeEntry(x){
  selectedEntry=x;const discipline=judgeDiscipline(x.category),rubric=RUBRICS[discipline];$("judgeScorePanel").hidden=false;
  $("judgeEntryTitle").textContent=x.names;$("judgeEntryMeta").textContent=x.category+" • "+x.block+" • "+x.school+" • "+x.id;
