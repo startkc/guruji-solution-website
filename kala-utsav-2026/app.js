@@ -34,13 +34,21 @@ const JUDGES={
 "श्री अमरेश कुमार":"पारंपरिक कहानी वाचन","श्री सुधाकर कांत चक्रवर्ती":"पारंपरिक कहानी वाचन"
 };
 const RUBRICS={
-"संगीत गायन":[["सुर",20],["लय",20],["शैली में प्रामाणिकता",20],["प्रस्तुति तकनीक",20],["लेखन / वीडियो",20]],
-"संगीत वादन":[["सुर",20],["लय",20],["शैली में प्रामाणिकता",20],["प्रस्तुति तकनीक",20],["लेखन / वीडियो",20]],
-"नृत्य":[["शैली में प्रामाणिकता",20],["विविधताओं में नवाचार",20],["वेशभूषा",10],["प्रस्तुति कौशल",20],["संगीत",10],["लेखन / वीडियो",20]],
-"नाटक":[["विषयवस्तु",10],["संचार कौशल / अभिव्यक्ति",20],["मंच साज-सज्जा / डिजाइन",15],["पोशाक और श्रृंगार",15],["समग्र प्रस्तुति",20],["लेखन / वीडियो",20]],
-"दृश्य कला":[["रचना एवं शैली",20],["मौलिकता",20],["तकनीक",20],["प्रस्तुति / कथन",20],["लेखन / वीडियो",20]],
-"पारंपरिक कहानी वाचन":[["विषयवस्तु",20],["संचार कौशल / अभिव्यक्ति",20],["मंच साज-सज्जा / डिजाइन",10],["पोशाक और श्रृंगार",10],["समग्र प्रस्तुति",20],["लेखन / वीडियो",20]]
+"संगीत गायन":[["शैली की प्रामाणिकता",10],["सुर",20],["ताल",20],["उपभाषा का उच्चारण",15],["वेशभूषा की प्रामाणिकता",15],["मंच सज्जा सामग्री का उपयोग",5],["सम्पूर्ण प्रस्तुतीकरण",15]],
+"संगीत वादन":[["शैली की प्रामाणिकता",10],["सुर",20],["ताल",20],["वाद्य की सुर गुणवत्ता",15],["वेशभूषा की प्रामाणिकता",10],["मंच सज्जा सामग्री का उपयोग",10],["सम्पूर्ण प्रस्तुतीकरण",15]],
+"नृत्य":[["शैली",10],["विवेचना",10],["हाव-भाव",15],["ताल",15],["रचनात्मकता",15],["साज-सज्जा",10],["वेश-भूषा",10],["सम्पूर्ण प्रस्तुतीकरण",15]],
+"नाटक":[["आंगिक अभिनय",10],["वाचिक क्षमता",10],["पटकथा",20],["रूप सज्जा",10],["वस्त्र विन्यास",10],["नाट्य शैली",20],["सम्पूर्ण प्रस्तुतीकरण",20]],
+"दृश्य कला 2D":[["शैली",10],["रचना",15],["मौलिकता",20],["शुद्धता/बारीकी",10],["प्रविधि",10],["समग्र छवि",15],["प्रस्तुतीकरण",20]],
+"दृश्य कला 3D":[["शैली",10],["उत्पाद की उपयोगिता",15],["मौलिकता",20],["शुद्धता/बारीकी",10],["प्रविधि",10],["समग्र छवि",15],["प्रस्तुतीकरण",20]],
+"दृश्य कला स्थानीय खेल-खिलौना":[["अनुभव",10],["उत्पाद की उपयोगिता, विकास एवं मूल्य",15],["मौलिकता एवं प्रासंगिक रचनात्मकता",20],["शुद्धता/बारीकी",10],["प्रविधि",10],["समग्र छवि",15],["प्रस्तुतीकरण",20]],
+"पारंपरिक कहानी वाचन":[["विषय वस्तु",25],["मौलिकता",10],["उच्चारण",15],["भाषा शैली",10],["भाव भंगिमा",10],["समय प्रबंधन",10],["प्रस्तुतीकरण",20]]
 };
+function rubricKey(category){
+ if(category.includes("2D"))return "दृश्य कला 2D";
+ if(category.includes("3D"))return "दृश्य कला 3D";
+ if(category.includes("शिल्प")||category.includes("खिलौने"))return "दृश्य कला स्थानीय खेल-खिलौना";
+ return judgeDiscipline(category);
+}
 function judgeDiscipline(category){if(category.includes("संगीत गायन"))return "संगीत गायन";if(category.includes("संगीत वादन"))return "संगीत वादन";if(category.includes("नृत्य"))return "नृत्य";if(category.includes("नाटक"))return "नाटक";if(category.includes("दृश्य कला"))return "दृश्य कला";return "पारंपरिक कहानी वाचन"}
 let selectedJudge="",selectedEntry=null,existingEvaluations=[];
 async function initEvaluation(){
@@ -52,9 +60,16 @@ async function initEvaluation(){
  if(accessMode==="evaluation"&&selectedJudge){js.value=selectedJudge;js.disabled=true;js.onchange();} $("exportEvaluationMarks").onclick=exportEvaluationMarks;
 }
 async function renderJudgeEntries(){
- const rows=await all(),idx=+$("judgeArt").value,cat=CATS[idx]?.[0];$("judgeEntryList").innerHTML="";$("judgeScorePanel").hidden=true;
+ const idx=+$("judgeArt").value,cat=CATS[idx]?.[0];$("judgeEntryList").innerHTML="";$("judgeScorePanel").hidden=true;
  if(!cat)return;
- let ev=[];try{const x=await api("evaluation-list","GET",{judge:selectedJudge});ev=x.evaluations||[]}catch(e){$("judgeEntryList").textContent="Evaluation service not ready: "+e.message;return}
+ let rows=await all(),ev=[];
+ try{
+  const cloud=await api("evaluation-registrations","GET",{judge:selectedJudge});
+  const shared=cloud.records||[];
+  for(const record of shared){const local=cloudToLocal(record);await put(local)}
+  rows=await all();
+  const x=await api("evaluation-list","GET",{judge:selectedJudge});ev=x.evaluations||[];
+ }catch(e){$("judgeEntryList").textContent="Shared evaluation data not available: "+e.message;return}
  existingEvaluations=ev;allCacheForExport=rows;
  rows.filter(x=>x.category===cat).sort((a,b)=>a.names.localeCompare(b.names)).forEach(x=>{
   const b=document.createElement("button");b.type="button";b.className="secondary";b.style.display="block";b.style.width="100%";b.style.textAlign="left";b.style.margin="8px 0";
@@ -73,7 +88,7 @@ function exportEvaluationMarks(){
  const registrations=allCacheForExport||[];
  existingEvaluations.forEach(ev=>{
   const reg=registrations.find(x=>x.id===ev.registration_id)||{};
-  const rubric=RUBRICS[ev.discipline]||[];
+  const rubric=RUBRICS[rubricKey(ev.category)]||[];
   rubric.forEach((item,i)=>rows.push([ev.registration_id,ev.judge_name,ev.category,ev.discipline,reg.names||"",reg.block||"",reg.school||"",item[0],ev.scores?.[i]??"",item[1],ev.total,ev.remarks||""]));
  });
  const csv=[headers,...rows].map(row=>row.map(v=>'"'+String(v??"").replace(/"/g,'""')+'"').join(",")).join("\r\n");
@@ -81,7 +96,7 @@ function exportEvaluationMarks(){
 }
 let allCacheForExport=[];
 async function openJudgeEntry(x){
- selectedEntry=x;const discipline=judgeDiscipline(x.category),rubric=RUBRICS[discipline];$("judgeScorePanel").hidden=false;
+ selectedEntry=x;const discipline=judgeDiscipline(x.category),rubric=RUBRICS[rubricKey(x.category)];$("judgeScorePanel").hidden=false;
  $("judgeEntryTitle").textContent=x.names;$("judgeEntryMeta").textContent=x.category+" • "+x.block+" • "+x.school+" • "+x.id;
  const old=existingEvaluations.find(v=>v.registration_id===x.id&&v.judge_name===selectedJudge);
  $("judgeCriteria").innerHTML="";
@@ -90,7 +105,7 @@ async function openJudgeEntry(x){
 }
 $("saveEvaluation").onclick=async()=>{
  if(!selectedJudge||!selectedEntry)return;
- const discipline=judgeDiscipline(selectedEntry.category),rubric=RUBRICS[discipline],scores=[];
+ const discipline=judgeDiscipline(selectedEntry.category),rubric=RUBRICS[rubricKey(selectedEntry.category)],scores=[];
  for(let i=0;i<rubric.length;i++){const v=$("judgeMark"+i).value,n=Number(v);if(v===""||!Number.isInteger(n)||n<0||n>rubric[i][1])return alert(rubric[i][0]+": enter a whole number from 0 to "+rubric[i][1]);scores.push(n)}
  const total=scores.reduce((a,b)=>a+b,0);
  try{await api("evaluation-save","POST",{registration_id:selectedEntry.id,judge_name:selectedJudge,category:selectedEntry.category,discipline,scores,total,remarks:$("judgeRemarks").value});$("evaluationMsg").textContent="Saved successfully. Total: "+total+"/100";await renderJudgeEntries();openJudgeEntry(selectedEntry)}catch(e){alert("Evaluation save failed: "+e.message)}
