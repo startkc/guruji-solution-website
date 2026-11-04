@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
   if (!(await validToken(token, sessionSecret))) return json({ error: "Session expired or invalid" }, 401);
   const payloadPart = token.split(".")[0] || "";
   let sessionRole = "user", sessionJudgeName = "";
-  try { const decoded = atob(payloadPart.replace(/-/g, "+").replace(/_/g, "/")); const sessionData = JSON.parse(decoded); sessionRole = sessionData.role || "user"; sessionJudgeName = String(sessionData.judge_name || ""); } catch { return json({ error: "Invalid session" }, 401); }
+  try { const binary = atob(payloadPart.replace(/-/g, "+").replace(/_/g, "/")); const bytes = Uint8Array.from(binary, c => c.charCodeAt(0)); const decoded = new TextDecoder().decode(bytes); const sessionData = JSON.parse(decoded); sessionRole = sessionData.role || "user"; sessionJudgeName = String(sessionData.judge_name || ""); } catch { return json({ error: "Invalid session" }, 401); }
   const db = createClient(url, serviceKey, { auth: { persistSession: false } });
   if (sessionRole === "judge" && !["evaluation-list","evaluation-save"].includes(path)) return json({ error: "Judge access is limited to evaluation" }, 403);
   if (sessionRole === "admin" && !["audit-list","admin-results"].includes(path)) return json({ error: "Admin access is limited to admin reports" }, 403);
