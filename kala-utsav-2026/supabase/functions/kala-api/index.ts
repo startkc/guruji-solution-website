@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
       return json({ error: "Judge identity mismatch" }, 403);
     const discipline = judgeAssignments[judge];
     const { data, error } = await db.from("kala_registrations")
-      .select("id,category_index,category,event_date,entry_type,participant_names,participant_details,block,school,udise,official,created_at")
+      .select("id,category_index,category,event_date,entry_type,participant_names,participant_details,block,school,udise,school_verified,school_source,remarks,official,created_at")
       .order("created_at", { ascending: false });
     if (error) return json({ error: error.message }, 500);
     const records = (data || []).filter((record: { category: string }) => judgeDiscipline(record.category || "") === discipline);
