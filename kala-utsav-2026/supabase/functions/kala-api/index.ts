@@ -88,7 +88,14 @@ Deno.serve(async (req) => {
   };
   if (path === "evaluation-list" && req.method === "GET") {
     const judge = new URL(req.url).searchParams.get("judge") || "";
-    if (sessionRole !== "judge" || judge !== sessionJudgeName) return json({ error: "Judge identity mismatch" }, 403);
+    if (sessionRole !== "judge" || judge !== sessionJudgeName) {
+      return json({ error: "Judge identity mismatch", diagnostic: {
+        roleMatched: sessionRole === "judge",
+        judgeMatched: judge === sessionJudgeName,
+        requestedJudge: judge,
+        tokenJudge: sessionJudgeName
+      } }, 403);
+    }
     if (!judgeAssignments[judge]) return json({ error: "Unknown judge" }, 400);
     const { data, error } = await db.from("kala_evaluations").select("*").eq("judge_name", judge);
     if (error) return json({ error: error.message }, 500);
