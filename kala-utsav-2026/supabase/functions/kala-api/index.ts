@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
   let sessionRole = "user", sessionJudgeName = "";
   try { const binary = atob(payloadPart.replace(/-/g, "+").replace(/_/g, "/")); const bytes = Uint8Array.from(binary, c => c.charCodeAt(0)); const decoded = new TextDecoder().decode(bytes); const sessionData = JSON.parse(decoded); sessionRole = sessionData.role || "user"; sessionJudgeName = String(sessionData.judge_name || ""); } catch { return json({ error: "Invalid session" }, 401); }
   const db = createClient(url, serviceKey, { auth: { persistSession: false } });
-  if (sessionRole === "judge" && !["evaluation-list","evaluation-save"].includes(path)) return json({ error: "Judge access is limited to evaluation" }, 403);
+  if (sessionRole === "judge" && !["evaluation-registrations","evaluation-list","evaluation-save"].includes(path)) return json({ error: "Judge access is limited to evaluation" }, 403);
   if (sessionRole === "admin" && !["audit-list","admin-results"].includes(path)) return json({ error: "Admin access is limited to admin reports" }, 403);
   if (path === "admin-results" && req.method === "GET") {
     if (sessionRole !== "admin") return json({ error: "Admin access required" }, 403);
@@ -86,6 +86,18 @@ Deno.serve(async (req) => {
     "श्रीमती ललिता भारती":"दृश्य कला","श्रीमती अर्चना कुमारी":"दृश्य कला",
     "श्री अमरेश कुमार":"पारंपरिक कहानी वाचन","श्री सुधाकर कांत चक्रवर्ती":"पारंपरिक कहानी वाचन"
   };
+  if (path === "evaluation-registrations" && req.method === "GET") {
+    const judge = new URL(req.url).searchParams.get("judge") || "";
+    if (sessionRole !== "judge" || judge !== sessionJudgeName || !judgeAssignments[judge])
+      return json({ error: "Judge identity mismatch" }, 403);
+    const discipline = judgeAssignments[judge];
+    const { data, error } = await db.from("kala_registrations")
+      .select("id,category_index,category,event_date,entry_type,participant_names,participant_details,block,school,udise,official,created_at")
+      .order("created_at", { ascending: false });
+    if (error) return json({ error: error.message }, 500);
+    const records = (data || []).filter((record: { category: string }) => judgeDiscipline(record.category || "") === discipline);
+    return json({ records });
+  }
   if (path === "evaluation-list" && req.method === "GET") {
     const judge = new URL(req.url).searchParams.get("judge") || "";
     if (sessionRole !== "judge" || judge !== sessionJudgeName) {
@@ -110,12 +122,20 @@ Deno.serve(async (req) => {
       return json({ error: "Missing or invalid evaluation fields" }, 400);
     if (judgeAssignments[judge] !== judgeDiscipline(category) || discipline !== judgeAssignments[judge])
       return json({ error: "This judge is not assigned to this art form" }, 403);
-    const limits: Record<string,number[]> = {
-      "संगीत गायन":[20,20,20,20,20],"संगीत वादन":[20,20,20,20,20],
-      "नृत्य":[20,20,10,20,10,20],"नाटक":[10,20,15,15,20,20],
-      "दृश्य कला":[20,20,20,20,20],"पारंपरिक कहानी वाचन":[20,20,10,10,20,20]
+    const rubricLimits: Record<string,number[]> = {
+      "संगीत गायन":[10,20,20,15,15,5,15],
+      "संगीत वादन":[10,20,20,15,10,10,15],
+      "नृत्य":[10,10,15,15,15,10,10,15],
+      "नाटक":[10,10,20,10,10,20,20],
+      "दृश्य कला 2D":[10,15,20,10,10,15,20],
+      "दृश्य कला 3D":[10,15,20,10,10,15,20],
+      "दृश्य कला स्थानीय खेल-खिलौना":[10,15,20,10,10,15,20],
+      "पारंपरिक कहानी वाचन":[25,10,15,10,10,10,20]
     };
-    const maxes = limits[discipline];
+    const rubricKey = (value: string) => value.includes("2D") ? "दृश्य कला 2D" :
+      value.includes("3D") ? "दृश्य कला 3D" :
+      value.includes("शिल्प") || value.includes("खिलौने") ? "दृश्य कला स्थानीय खेल-खिलौना" : judgeDiscipline(value);
+    const maxes = rubricLimits[rubricKey(category)];
     if (scores.length !== maxes.length || scores.some((v: unknown,i: number) => !Number.isInteger(v) || Number(v)<0 || Number(v)>maxes[i]))
       return json({ error: "Scores do not match the official rubric" }, 400);
     const total = scores.reduce((a: number,b: number) => a + Number(b), 0);
